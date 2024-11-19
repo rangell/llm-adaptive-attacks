@@ -4,7 +4,9 @@ import os
 from typing import List
 from language_models import GPT, HuggingFace
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from config import VICUNA_PATH, LLAMA_7B_PATH, LLAMA_13B_PATH, LLAMA_70B_PATH, LLAMA3_8B_PATH, LLAMA3_70B_PATH, GEMMA_2B_PATH, GEMMA_7B_PATH, MISTRAL_7B_PATH, MIXTRAL_7B_PATH, R2D2_PATH, PHI3_MINI_PATH, TARGET_TEMP, TARGET_TOP_P   
+from config import *
+
+from IPython import embed
 
 
 def load_target_model(args):
@@ -29,56 +31,74 @@ class TargetLM():
         self.temperature = temperature
         self.top_p = top_p
         self.model, self.template = load_indiv_model(model_name)
+        assert hasattr(self.model.tokenizer, "chat_template")
         self.n_input_tokens = 0
         self.n_output_tokens = 0
         self.n_input_chars = 0
         self.n_output_chars = 0
 
-    def get_response(self, prompts_list: List[str], max_n_tokens=None, temperature=None, no_template=False) -> List[dict]:
-        batchsize = len(prompts_list)
-        tokenizer = self.model.tokenizer
-        convs_list = [common.conv_template(self.template) for _ in range(batchsize)]
-        full_prompts = []  # batch of strings
-        if no_template:
-            full_prompts = prompts_list
-        else:
-            for conv, prompt in zip(convs_list, prompts_list):
-                if 'mistral' in self.model_name:
-                    # Mistral models don't use a system prompt so we emulate it within a user message
-                    # following Vidgen et al. (2024) (https://arxiv.org/abs/2311.08370)
-                    prompt = "SYSTEM PROMPT: Always assist with care, respect, and truth. Respond with utmost utility yet securely. Avoid harmful, unethical, prejudiced, or negative content. Ensure replies promote fairness and positivity.\n\n###\n\nUSER: " + prompt
-                if 'llama3' in self.model_name or 'phi3' in self.model_name:
-                    # instead of '[INST] <<SYS>>\n{system_message}\n<</SYS>>\n\n' for llama2
-                    conv.system_template = '{system_message}'  
-                if 'phi3' in self.model_name:
-                    conv.system_message = 'You are a helpful AI assistant.'
-                if "llama2" in self.model_name:
-                    prompt = prompt + ' '
-                conv.append_message(conv.roles[0], prompt)
+    def get_full_prompts(self, prompts_list: List[str]) -> List[str]:
+        # TODO: add functionality for OpenAI models, right now this only works for Huggingface chat models
+        full_prompts = []
+        for prompt in prompts_list:
+            chat = [
+                #{"role": "system", "content": "You are a helpful assistant."},
+                {"role": "user", "content": prompt}
+            ]
+            full_prompts.append(self.model.tokenizer.apply_chat_template(chat, tokenize=False, add_generation_prompt=True))
 
-                if "gpt" in self.model_name:
-                    full_prompts.append(conv.to_openai_api_messages())
-                # older models
-                elif "vicuna" in self.model_name:
-                    conv.append_message(conv.roles[1], None) 
-                    formatted_prompt = conv.get_prompt()
-                    full_prompts.append(formatted_prompt)
-                elif "llama2" in self.model_name:
-                    conv.append_message(conv.roles[1], None) 
-                    formatted_prompt = '<s>' + conv.get_prompt()
-                    full_prompts.append(formatted_prompt)
-                # newer models
-                elif "r2d2" in self.model_name or "gemma" in self.model_name or "mistral" in self.model_name or "llama3" in self.model_name or "phi3" in self.model_name: 
-                    conv_list_dicts = conv.to_openai_api_messages()
-                    if 'gemma' in self.model_name or 'mistral' in self.model_name:
-                        conv_list_dicts = conv_list_dicts[1:]  # remove the system message inserted by FastChat
-                    full_prompt = tokenizer.apply_chat_template(conv_list_dicts, tokenize=False, add_generation_prompt=True)
-                    full_prompts.append(full_prompt)
-                else:
-                    raise ValueError(f"To use {self.model_name}, first double check what is the right conversation template. This is to prevent any potential mistakes in the way templates are applied.")
+        return full_prompts
+
+        ## old version:
+        #batchsize = len(prompts_list)
+        #tokenizer = self.model.tokenizer
+        #convs_list = [common.conv_template(self.template) for _ in range(batchsize)]
+        #full_prompts = []  # batch of strings
+        #if no_template:
+        #    full_prompts = prompts_list
+        #else:
+        #    for conv, prompt in zip(convs_list, prompts_list):
+        #        if 'mistral' in self.model_name:
+        #            # Mistral models don't use a system prompt so we emulate it within a user message
+        #            # following Vidgen et al. (2024) (https://arxiv.org/abs/2311.08370)
+        #            prompt = "SYSTEM PROMPT: Always assist with care, respect, and truth. Respond with utmost utility yet securely. Avoid harmful, unethical, prejudiced, or negative content. Ensure replies promote fairness and positivity.\n\n###\n\nUSER: " + prompt
+        #        if 'llama3' in self.model_name or 'phi3' in self.model_name:
+        #            # instead of '[INST] <<SYS>>\n{system_message}\n<</SYS>>\n\n' for llama2
+        #            conv.system_template = '{system_message}'  
+        #        if 'phi3' in self.model_name:
+        #            conv.system_message = 'You are a helpful AI assistant.'
+        #        if "llama2" in self.model_name:
+        #            prompt = prompt + ' '
+        #        conv.append_message(conv.roles[0], prompt)
+
+        #        if "gpt" in self.model_name:
+        #            full_prompts.append(conv.to_openai_api_messages())
+        #        # older models
+        #        elif "vicuna" in self.model_name:
+        #            conv.append_message(conv.roles[1], None) 
+        #            formatted_prompt = conv.get_prompt()
+        #            full_prompts.append(formatted_prompt)
+        #        elif "llama2" in self.model_name:
+        #            conv.append_message(conv.roles[1], None) 
+        #            formatted_prompt = '<s>' + conv.get_prompt()
+        #            full_prompts.append(formatted_prompt)
+        #        # newer models
+        #        elif "r2d2" in self.model_name or "gemma" in self.model_name or "mistral" in self.model_name or "llama3" in self.model_name or "phi3" in self.model_name or "mixtral" in self.model_name: 
+        #            conv_list_dicts = conv.to_openai_api_messages()
+        #            if 'gemma' in self.model_name:
+        #                conv_list_dicts = conv_list_dicts[1:]  # remove the system message inserted by FastChat
+        #            full_prompt = tokenizer.apply_chat_template(conv_list_dicts, tokenize=False, add_generation_prompt=True)
+        #            full_prompts.append(full_prompt)
+        #        else:
+        #            raise ValueError(f"To use {self.model_name}, first double check what is the right conversation template. This is to prevent any potential mistakes in the way templates are applied.")
+        #return full_prompts
+
+    def get_response(self, prompts_list: List[str], max_n_tokens=None, temperature=None, text_only=False) -> List[dict]:
+        full_prompts = self.get_full_prompts(prompts_list)
         outputs = self.model.generate(full_prompts, 
                                       max_n_tokens=max_n_tokens,  
                                       temperature=self.temperature if temperature is None else temperature,
+                                      text_only=text_only,
                                       top_p=self.top_p
         )
         
@@ -98,14 +118,17 @@ def load_indiv_model(model_name, device=None):
         model = AutoModelForCausalLM.from_pretrained(
                 model_path, 
                 torch_dtype=torch.float16,
-                low_cpu_mem_usage=True, device_map="auto",
+                low_cpu_mem_usage=True,
+                device_map="auto",
+                #force_download=True,
                 token=os.getenv("HF_TOKEN"),
                 trust_remote_code=True).eval()
 
         tokenizer = AutoTokenizer.from_pretrained(
             model_path,
             use_fast=False,
-            token=os.getenv("HF_TOKEN")
+            token=os.getenv("HF_TOKEN"),
+            padding_side="left"
         )
 
         if 'llama2' in model_path.lower():
@@ -125,6 +148,7 @@ def load_indiv_model(model_name, device=None):
     return lm, template
 
 def get_model_path_and_template(model_name):
+    # TODO: remove "template"???
     full_model_dict={
         "gpt-4-0125-preview":{
             "path":"gpt-4",
@@ -174,6 +198,22 @@ def get_model_path_and_template(model_name):
             "path":LLAMA3_70B_PATH,
             "template":"llama-2"
         },
+        "llama3.1-8b":{
+            "path":LLAMA3p1_8B_PATH,
+            "template":"llama-2"
+        },
+        "llama3.1-70b":{
+            "path":LLAMA3p1_70B_PATH,
+            "template":"llama-2"
+        },
+        "llama3.2-1b":{
+            "path":LLAMA3p2_1B_PATH,
+            "template":"llama-2"
+        },
+        "llama3.2-3b":{
+            "path":LLAMA3p2_3B_PATH,
+            "template":"llama-2"
+        },
         "gemma-2b":{
             "path":GEMMA_2B_PATH,
             "template":"gemma"
@@ -181,6 +221,50 @@ def get_model_path_and_template(model_name):
         "gemma-7b":{
             "path":GEMMA_7B_PATH,
             "template":"gemma"
+        },
+        "gemma1.1-2b":{
+            "path":GEMMA1p1_2B_PATH,
+            "template":"gemma"
+        },
+        "gemma1.1-7b":{
+            "path":GEMMA1p1_7B_PATH,
+            "template":"gemma"
+        },
+        "gemma2-2b":{
+            "path":GEMMA2_2B_PATH,
+            "template":"gemma"
+        },
+        "gemma2-9b":{
+            "path":GEMMA2_9B_PATH,
+            "template":"gemma"
+        },
+        "gemma2-27b":{
+            "path":GEMMA2_27B_PATH,
+            "template":"gemma"
+        },
+        "qwen2.5-0.5b":{
+            "path":QWEN2p5_0p5B_PATH,
+            "template":"qwen"
+        },
+        "qwen2.5-1.5b":{
+            "path":QWEN2p5_1p5B_PATH,
+            "template":"qwen"
+        },
+        "qwen2.5-3b":{
+            "path":QWEN2p5_3B_PATH,
+            "template":"qwen"
+        },
+        "qwen2.5-7b":{
+            "path":QWEN2p5_7B_PATH,
+            "template":"qwen"
+        },
+        "qwen2.5-14b":{
+            "path":QWEN2p5_14B_PATH,
+            "template":"qwen"
+        },
+        "qwen2.5-32b":{
+            "path":QWEN2p5_32B_PATH,
+            "template":"qwen"
         },
         "mistral-7b":{
             "path":MISTRAL_7B_PATH,
