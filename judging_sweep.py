@@ -12,10 +12,10 @@ SBATCH_TEMPLATE = """
 #SBATCH --output=__out_path__.out
 #SBATCH -e __out_path__.err
 #
-#SBATCH --cpus-per-task=4
-#SBATCH --gres=gpu:4
+#SBATCH --cpus-per-task=8
+#SBATCH --gres=gpu:rtx8000:__num_gpus__
 #SBATCH --mem=64G
-#SBATCH --time=0-24:00:00
+#SBATCH --time=0-36:00:00
 
 singularity exec --nv\
             --overlay /scratch/rca9780/jailbreaks/overlay-15GB-500K.ext3:ro \
@@ -27,31 +27,37 @@ singularity exec --nv\
 if __name__ == "__main__":
 
     models = [
-        #"llama2-7b",
-        #"llama3-8b",
-        "llama3-70b",
-        #"llama3.1-8b",
+        "llama3-8b",
+        #"llama3-70b",
+        "llama3.1-8b",
         "llama3.1-70b",
-        #"llama3.2-1b",
-        #"llama3.2-3b",
+        "llama3.2-1b",
+        "llama3.2-3b",
         #"gemma-2b",
         "gemma-7b",
-        "gemma1.1-2b",
+        #"gemma1.1-2b",
         "gemma1.1-7b",
-        #"gemma2-2b",
+        "gemma2-2b",
         "gemma2-9b",
         "gemma2-27b",
-        #"qwen2.5-0.5b",
-        #"qwen2.5-1.5b",
+        "qwen2.5-0.5b",
+        "qwen2.5-1.5b",
         #"qwen2.5-3b",
         #"qwen2.5-7b",
-        "qwen2.5-14b",
+        #"qwen2.5-14b",
         "qwen2.5-32b"
     ]
     #jailbreak_datasets = ["wildjailbreak", "jailbreak_success"]
     jailbreak_datasets = ["jailbreak_success"]
 
     for model_name in models:
+        model_size = float(model_name.split("-")[1].replace("b", ""))
+        if model_size >= 70:
+            num_gpus = "4"
+        elif model_size >= 27:
+            num_gpus = "2"
+        else:
+            num_gpus = "1"
         for jailbreak_dataset in jailbreak_datasets:
             job_name = "{}".format(model_name)
             out_path = "jailbreak_screening_results/{}/{}".format(jailbreak_dataset, model_name)
@@ -60,6 +66,7 @@ if __name__ == "__main__":
             sbatch_str = sbatch_str.replace("__out_path__", out_path)
             sbatch_str = sbatch_str.replace("__model_name__", model_name)
             sbatch_str = sbatch_str.replace("__jailbreak_dataset__", jailbreak_dataset)
+            sbatch_str = sbatch_str.replace("__num_gpus__", num_gpus)
             
             print(f"cmd: {model_name}\n")
             with tempfile.NamedTemporaryFile() as f:

@@ -72,11 +72,11 @@ if __name__ == '__main__':
     # # We could alternatively use the alpaca dataset
     # alpaca_dataset = load_dataset("tatsu-lab/alpaca")
 
-    hidden_layers = [-1]  # choose a middle layer for getting representations, we could change this though
+    hidden_layers = [-1]  # choose the last layer for getting representations, we could change this though
     rep_token = -1
-    rep_reading_pipeline =  pipeline("rep-reading", model=target_lm.model.model, tokenizer=target_lm.model.tokenizer)
+    rep_reading_pipeline =  pipeline("rep-reading", model=target_lm.model.model, tokenizer=target_lm.model.tokenizer, device_map="auto")
 
-    reps = rep_reading_pipeline(prompts, rep_token=rep_token, hidden_layers=hidden_layers, batch_size=128)
+    reps = rep_reading_pipeline(prompts, rep_token=rep_token, hidden_layers=hidden_layers, batch_size=32)
     reps = reformat_reps(reps)
 
     k = 10
