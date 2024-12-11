@@ -46,14 +46,15 @@ class TargetLM():
 
     def get_response(self, prompts_list: List[str], max_n_tokens=None, temperature=None, text_only=False, apply_chat_template=True) -> List[dict]:
         if apply_chat_template:
-            full_prompts = self.get_full_prompts(prompts_list, apply_chat_tempate=apply_chat_template)
+            full_prompts = self.get_full_prompts(prompts_list)
         else:
             full_prompts = prompts_list
         outputs = self.model.generate(full_prompts, 
                                       max_n_tokens=max_n_tokens,  
                                       temperature=self.temperature if temperature is None else temperature,
                                       text_only=text_only,
-                                      top_p=self.top_p
+                                      top_p=self.top_p,
+                                      skip_special_tokens=True
         )
         self.n_input_tokens += sum(output['n_input_tokens'] for output in outputs)
         self.n_output_tokens += sum(output['n_output_tokens'] for output in outputs)

@@ -47,6 +47,11 @@ if __name__ == '__main__':
         help="Jailbreak dataset to use.",
         choices=["jailbreak_success", "wildjailbreak"]
     )
+    parser.add_argument(
+        "--output-dir",
+        help="Path to output directory.",
+        required=True
+    )
 
     args = parser.parse_args()
 
@@ -61,7 +66,7 @@ if __name__ == '__main__':
     # first pass: simple rule judge
     target_max_n_tokens = 10
     temperature = 1.0
-    batch_size = 128
+    batch_size = 1024
 
     with open(f"data/{args.jailbreak_dataset}_preprocessed.pkl", "rb") as f:
         _jailbreak_dataset = pickle.load(f)
@@ -75,109 +80,109 @@ if __name__ == '__main__':
     jailbreak_dataloader = DataLoader(jailbreak_dataset, batch_size=batch_size, shuffle=False, collate_fn=custom_collate_fn)
     prompt_key = "jailbreak_prompt_text"
 
-    subbatch_factor = 1
-    batch_responses = []
-    for batch in tqdm(jailbreak_dataloader):
-        _batch = copy.deepcopy(batch)
-        batch_processed = False
-        while not batch_processed:
-            try:
-                responses = []
-                subbatch_size = batch_size // subbatch_factor
-                batch_length = len(batch["prompt_name"])
-                for i in range(math.ceil(batch_length / subbatch_size)):
-                    start_idx = i*subbatch_size
-                    end_idx = min((i+1)*subbatch_size, batch_length)
-                    subbatch_prompts = batch[prompt_key][start_idx:end_idx]
-                    subbatch_responses = target_lm.get_response(
-                        subbatch_prompts,
-                        max_n_tokens=target_max_n_tokens,
-                        temperature=temperature,
-                        text_only=True,
-                        apply_chat_template=False)
-                    responses += subbatch_responses
-                _batch['response'] = [resp['text'] for resp in responses]
-                batch_processed = True
-            except torch.OutOfMemoryError as e: 
-                gc.collect()
-                torch.cuda.empty_cache()
-                if subbatch_factor == batch_size:
-                    raise ValueError("Subbatch size is already 1!!!")
-                subbatch_factor *= 2
-                print("new subbatch factor: ", subbatch_factor)
-        _batch['jailbroken_rule_judge'] = [judge_rule_based(resp) for resp in _batch['response']]
-        batch_responses.append(_batch)
+    #subbatch_factor = 1
+    #batch_responses = []
+    #for batch in tqdm(jailbreak_dataloader):
+    #    _batch = copy.deepcopy(batch)
+    #    batch_processed = False
+    #    while not batch_processed:
+    #        try:
+    #            responses = []
+    #            subbatch_size = batch_size // subbatch_factor
+    #            batch_length = len(batch["prompt_name"])
+    #            for i in range(math.ceil(batch_length / subbatch_size)):
+    #                start_idx = i*subbatch_size
+    #                end_idx = min((i+1)*subbatch_size, batch_length)
+    #                subbatch_prompts = batch[prompt_key][start_idx:end_idx]
+    #                subbatch_responses = target_lm.get_response(
+    #                    subbatch_prompts,
+    #                    max_n_tokens=target_max_n_tokens,
+    #                    temperature=temperature,
+    #                    text_only=True,
+    #                    apply_chat_template=False)
+    #                responses += subbatch_responses
+    #            _batch['response'] = [resp['text'] for resp in responses]
+    #            batch_processed = True
+    #        except torch.OutOfMemoryError as e: 
+    #            gc.collect()
+    #            torch.cuda.empty_cache()
+    #            if subbatch_factor == batch_size:
+    #                raise ValueError("Subbatch size is already 1!!!")
+    #            subbatch_factor *= 2
+    #            print("new subbatch factor: ", subbatch_factor)
+    #    _batch['jailbroken_rule_judge'] = [judge_rule_based(resp) for resp in _batch['response']]
+    #    batch_responses.append(_batch)
 
-    with open(f'jailbreak_screening_results/{args.jailbreak_dataset}/{args.target_model}-short_responses.pkl', 'wb') as f:
-        pickle.dump(batch_responses, f)
+    #with open(f'{args.output_dir}/{args.target_model}-short_responses.pkl', 'wb') as f:
+    #    pickle.dump(batch_responses, f)
 
-    with open(f'jailbreak_screening_results/{args.jailbreak_dataset}/{args.target_model}-short_responses.pkl', 'rb') as f:
-        batch_responses = pickle.load(f)
+    #with open(f'{args.output_dir}/{args.target_model}-short_responses.pkl', 'rb') as f:
+    #    batch_responses = pickle.load(f)
 
-    # filtering batch_responses for only ones that did not refuse in first 10 tokens
-    prompt_responses = {}
-    filtered_prompt_responses = []
-    for batch in batch_responses:
-        for i in range(len(batch["prompt_name"])):
-            example_dict = {}
-            for key in batch.keys():
-                example_dict[key] = batch[key][i]
-            prompt_responses[batch["jailbreak_prompt_text"][i]] = example_dict
-            if example_dict['jailbroken_rule_judge'] == True:
-                filtered_prompt_responses.append(example_dict)
+    ## filtering batch_responses for only ones that did not refuse in first 10 tokens
+    #prompt_responses = {}
+    #filtered_prompt_responses = []
+    #for batch in batch_responses:
+    #    for i in range(len(batch["prompt_name"])):
+    #        example_dict = {}
+    #        for key in batch.keys():
+    #            example_dict[key] = batch[key][i]
+    #        prompt_responses[batch["jailbreak_prompt_text"][i]] = example_dict
+    #        if example_dict['jailbroken_rule_judge'] == True:
+    #            filtered_prompt_responses.append(example_dict)
 
-    target_max_n_tokens = 150
-    temperature = 1.0
-    batch_size = 32
+    #target_max_n_tokens = 150
+    #temperature = 1.0
+    #batch_size = 64
 
-    batch_responses = []
-    filtered_jailbreak_dataloader = DataLoader(filtered_prompt_responses, batch_size=batch_size, shuffle=False, collate_fn=custom_collate_fn)
+    #batch_responses = []
+    #filtered_jailbreak_dataloader = DataLoader(filtered_prompt_responses, batch_size=batch_size, shuffle=False, collate_fn=custom_collate_fn)
 
-    # second pass: need to generate a longer response to better judge
-    subbatch_factor = 1
-    batch_responses = []
-    for batch in tqdm(filtered_jailbreak_dataloader):
-        _batch = copy.deepcopy(batch)
-        batch_processed = False
-        while not batch_processed:
-            try:
-                responses = []
-                subbatch_size = batch_size // subbatch_factor
-                batch_length = len(batch["prompt_name"])
-                for i in range(math.ceil(batch_length / subbatch_size)):
-                    start_idx = i*subbatch_size
-                    end_idx = min((i+1)*subbatch_size, batch_length)
-                    subbatch_prompts = batch[prompt_key][start_idx:end_idx]
-                    subbatch_responses = target_lm.get_response(
-                        subbatch_prompts,
-                        max_n_tokens=target_max_n_tokens,
-                        temperature=temperature,
-                        text_only=True,
-                        apply_chat_template=False)
-                    responses += subbatch_responses
-                _batch['response'] = [resp['text'] for resp in responses]
-                batch_processed = True
-            except torch.OutOfMemoryError as e: 
-                gc.collect()
-                torch.cuda.empty_cache()
-                if subbatch_factor == batch_size:
-                    raise ValueError("Subbatch size is already 1!!!")
-                subbatch_factor *= 2
-                print("new subbatch factor: ", subbatch_factor)
-        _batch['jailbroken_rule_judge'] = [judge_rule_based(resp) for resp in _batch['response']]
-        batch_responses.append(_batch)
+    ## second pass: need to generate a longer response to better judge
+    #subbatch_factor = 1
+    #batch_responses = []
+    #for batch in tqdm(filtered_jailbreak_dataloader):
+    #    _batch = copy.deepcopy(batch)
+    #    batch_processed = False
+    #    while not batch_processed:
+    #        try:
+    #            responses = []
+    #            subbatch_size = batch_size // subbatch_factor
+    #            batch_length = len(batch["prompt_name"])
+    #            for i in range(math.ceil(batch_length / subbatch_size)):
+    #                start_idx = i*subbatch_size
+    #                end_idx = min((i+1)*subbatch_size, batch_length)
+    #                subbatch_prompts = batch[prompt_key][start_idx:end_idx]
+    #                subbatch_responses = target_lm.get_response(
+    #                    subbatch_prompts,
+    #                    max_n_tokens=target_max_n_tokens,
+    #                    temperature=temperature,
+    #                    text_only=True,
+    #                    apply_chat_template=False)
+    #                responses += subbatch_responses
+    #            _batch['response'] = [resp['text'] for resp in responses]
+    #            batch_processed = True
+    #        except torch.OutOfMemoryError as e: 
+    #            gc.collect()
+    #            torch.cuda.empty_cache()
+    #            if subbatch_factor == batch_size:
+    #                raise ValueError("Subbatch size is already 1!!!")
+    #            subbatch_factor *= 2
+    #            print("new subbatch factor: ", subbatch_factor)
+    #    _batch['jailbroken_rule_judge'] = [judge_rule_based(resp) for resp in _batch['response']]
+    #    batch_responses.append(_batch)
 
-    for batch in batch_responses:
-        for i in range(len(batch["prompt_name"])):
-            example_dict = {}
-            for key in batch.keys():
-                example_dict[key] = batch[key][i]
-            prompt_responses[batch["jailbreak_prompt_text"][i]] = example_dict
+    #for batch in batch_responses:
+    #    for i in range(len(batch["prompt_name"])):
+    #        example_dict = {}
+    #        for key in batch.keys():
+    #            example_dict[key] = batch[key][i]
+    #        prompt_responses[batch["jailbreak_prompt_text"][i]] = example_dict
 
-    with open(f'jailbreak_screening_results/{args.jailbreak_dataset}/{args.target_model}-long_responses.pkl', 'wb') as f:
-        pickle.dump(prompt_responses, f)
+    #with open(f'{args.output_dir}/{args.target_model}-long_responses.pkl', 'wb') as f:
+    #    pickle.dump(prompt_responses, f)
 
-    with open(f'jailbreak_screening_results/{args.jailbreak_dataset}/{args.target_model}-long_responses.pkl', 'rb') as f:
+    with open(f'{args.output_dir}/{args.target_model}-long_responses.pkl', 'rb') as f:
         prompt_responses = pickle.load(f)
 
     # get all of the special tokens, need to remove these from the responses
@@ -218,10 +223,10 @@ if __name__ == '__main__':
 
     # load guard model
     guard_model = AutoModelForCausalLM.from_pretrained(guard_model_name, torch_dtype=torch.bfloat16, device_map="auto")
-    batch_size = 8
+    batch_size = 32
 
     batch_responses = []
-    response_dataloader = DataLoader(list(augmented_prompt_responses.values())[-40:], batch_size=batch_size, shuffle=False, collate_fn=custom_collate_fn)
+    response_dataloader = DataLoader(list(augmented_prompt_responses.values()), batch_size=batch_size, shuffle=False, collate_fn=custom_collate_fn)
     for batch in tqdm(response_dataloader):
         _batch = copy.deepcopy(batch)
         inputs = guard_tokenizer(_batch["original_conversation"], padding=True, return_tensors="pt").to("cuda")
@@ -248,5 +253,5 @@ if __name__ == '__main__':
                 example_dict[key] = batch[key][i]
             prompt_responses[batch["jailbreak_prompt_text"][i]] = example_dict
 
-    with open(f'jailbreak_screening_results/{args.jailbreak_dataset}/{args.target_model}-judged_responses.pkl', 'wb') as f:
+    with open(f'{args.output_dir}/{args.target_model}-judged_responses.pkl', 'wb') as f:
         pickle.dump(prompt_responses, f)

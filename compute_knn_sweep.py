@@ -13,7 +13,7 @@ SBATCH_TEMPLATE = """
 #SBATCH -e __out_path__.err
 #
 #SBATCH --cpus-per-task=4
-#SBATCH --gres=gpu:4
+#SBATCH --gres=gpu:a100:2
 #SBATCH --mem=64G
 #SBATCH --time=0-24:00:00
 
@@ -27,25 +27,25 @@ singularity exec --nv\
 if __name__ == "__main__":
 
     models = [
-        #"llama2-7b",
-        #"llama3-8b",
+        "llama2-7b",
+        "llama3-8b",
         "llama3-70b",
-        #"llama3.1-8b",
+        "llama3.1-8b",
         "llama3.1-70b",
         #"llama3.2-1b",
-        #"llama3.2-3b",
+        "llama3.2-3b",
         #"gemma-2b",
-        #"gemma-7b",
+        "gemma-7b",
         #"gemma1.1-2b",
-        #"gemma1.1-7b",
+        "gemma1.1-7b",
         #"gemma2-2b",
-        #"gemma2-9b",
+        "gemma2-9b",
         "gemma2-27b",
         #"qwen2.5-0.5b",
-        #"qwen2.5-1.5b",
-        #"qwen2.5-3b",
-        #"qwen2.5-7b",
-        #"qwen2.5-14b",
+        "qwen2.5-1.5b",
+        "qwen2.5-3b",
+        "qwen2.5-7b",
+        "qwen2.5-14b",
         "qwen2.5-32b"
     ]
     #jailbreak_datasets = ["wildjailbreak", "jailbreak_success"]

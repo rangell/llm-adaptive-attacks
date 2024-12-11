@@ -99,7 +99,8 @@ class HuggingFace:
                  max_n_tokens: int, 
                  temperature: float,
                  text_only: bool = False,
-                 top_p: float = 1.0) -> List[Dict]:
+                 top_p: float = 1.0,
+                 skip_special_tokens: bool = False) -> List[Dict]:
         if 'llama2' in self.model_name.lower():
             max_n_tokens += 1  # +1 to account for the first special token (id=29871) for llama2 models
         batch_size = len(full_prompts_list)
@@ -128,7 +129,7 @@ class HuggingFace:
         if 'llama2' in self.model_name.lower():
             output_ids = output_ids[:, 1:]  # ignore the first special token (id=29871)
 
-        generated_texts = self.tokenizer.batch_decode(output_ids)
+        generated_texts = self.tokenizer.batch_decode(output_ids, skip_special_tokens=skip_special_tokens)
 
         if text_only:
             outputs = [{'text': generated_texts[i_batch],

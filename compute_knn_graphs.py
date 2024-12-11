@@ -72,14 +72,14 @@ if __name__ == '__main__':
     # # We could alternatively use the alpaca dataset
     # alpaca_dataset = load_dataset("tatsu-lab/alpaca")
 
-    hidden_layers = [-1]  # choose the last layer for getting representations, we could change this though
+    hidden_layers = [-(target_lm.model.model.config.num_hidden_layers // 2)]  # choose the last layer for getting representations, we could change this though
     rep_token = -1
     rep_reading_pipeline =  pipeline("rep-reading", model=target_lm.model.model, tokenizer=target_lm.model.tokenizer, device_map="auto")
 
     reps = rep_reading_pipeline(prompts, rep_token=rep_token, hidden_layers=hidden_layers, batch_size=32)
     reps = reformat_reps(reps)
 
-    k = 10
+    k = 100
     G = knn_graph(reps[hidden_layers[0]], k, mode='connectivity', include_self=False)  # this might not work for such a large number of reps
 
     knn_graph_data = {
@@ -90,7 +90,7 @@ if __name__ == '__main__':
         "reps": reps,
         "rep_token": rep_token,
         "hidden_layers": hidden_layers,
-    }
+    }   
 
-    with open(f'knn_graphs/{args.target_model}-{args.instructions_dataset}-knn_graph.pkl', 'wb') as f:
+    with open(f'/scratch/rca9780/llm-adaptive-attacks-data/knn_graphs/{args.target_model}-{args.instructions_dataset}-knn_graph-middle_layer.pkl', 'wb') as f:
         pickle.dump(knn_graph_data, f)
