@@ -22,7 +22,7 @@ class JudgeBase:
         self.top_p = args.judge_top_p
         self.goal = args.goal
         self.target_str = args.target_str
-        self.system_prompt = get_judge_system_prompt(args.goal, args.target_str)
+        self.system_prompt = get_judge_system_prompt(args.goal)
 
     def get_judge_prompt(self, attack_prompt, target_response):
         return f"[PROMPT]:{attack_prompt}\n[ASSISTANT'S RESPONSE]: {target_response}"

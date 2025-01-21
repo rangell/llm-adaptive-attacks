@@ -3,7 +3,7 @@ import torch
 import os
 from typing import List
 from language_models import GPT, HuggingFace
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, AutoConfig
 from config import *
 
 from IPython import embed
@@ -49,6 +49,7 @@ class TargetLM():
             full_prompts = self.get_full_prompts(prompts_list)
         else:
             full_prompts = prompts_list
+
         outputs = self.model.generate(full_prompts, 
                                       max_n_tokens=max_n_tokens,  
                                       temperature=self.temperature if temperature is None else temperature,
@@ -69,6 +70,7 @@ def load_indiv_model(model_name, device=None):
     if 'gpt' in model_name or 'together' in model_name:
         lm = GPT(model_name)
     else:
+        config = AutoConfig.from_pretrained(model_path, output_hidden_states=True)
         model = AutoModelForCausalLM.from_pretrained(
                 model_path, 
                 torch_dtype=torch.bfloat16,
@@ -76,6 +78,7 @@ def load_indiv_model(model_name, device=None):
                 device_map="auto",
                 #force_download=True,
                 token=os.getenv("HF_TOKEN"),
+                config=config,
                 trust_remote_code=True).eval()
 
         tokenizer = AutoTokenizer.from_pretrained(

@@ -7,7 +7,21 @@ import torch
 import gc
 import tiktoken
 from typing import Dict, List
+import numpy as np
 # import google.generativeai as palm
+
+from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
+from repe import repe_pipeline_registry # register 'rep-reading' and 'rep-control' tasks into Hugging Face pipelines
+
+
+def reformat_reps(orig_reps):
+    _per_layer_dict = {}
+    for k in orig_reps[0].keys():
+        _per_layer_dict[k] = torch.concat([x[k] for x in orig_reps])
+    out_reps = _per_layer_dict
+    for k, reps in out_reps.items():
+        out_reps[k] = reps.numpy()
+    return out_reps
 
 
 class GPT:
@@ -82,7 +96,9 @@ class GPT:
 
 
 class HuggingFace:
-    def __init__(self,model_name, model, tokenizer):
+    """ Wrapper around huggingface model. """
+
+    def __init__(self, model_name, model, tokenizer):
         self.model_name = model_name
         self.model = model 
         self.tokenizer = tokenizer
@@ -137,6 +153,12 @@ class HuggingFace:
                         'n_output_tokens': len(output_ids[i_batch]),
                     } for i_batch in range(batch_size) ]
         else:
+            with torch.no_grad():
+                _out = self.model(**inputs, eos_token_id=self.eos_token_ids, pad_token_id=self.tokenizer.pad_token_id)
+                hidden_states = torch.cat(_out.hidden_states, dim=0)    
+
+            from IPython import embed; embed(); exit()
+
             # output.scores: n_output_tokens x batch_size x vocab_size (can be counter-intuitive that batch_size doesn't go first)
             logprobs_tokens = [torch.nn.functional.log_softmax(output.scores[i_out_token], dim=-1).cpu().numpy() 
                             for i_out_token in range(len(output.scores))]
