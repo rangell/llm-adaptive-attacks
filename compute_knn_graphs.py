@@ -48,10 +48,12 @@ if __name__ == '__main__':
         "--instructions-dataset",
         default="wildjailbreak",
         help="Instructions dataset to use to compute representations.",
-        choices=["wildjailbreak"]
+        choices=["wildjailbreak", "alpaca"]
     )
 
     args = parser.parse_args()
+
+    assert args.instructions_dataset == "alpaca"
 
     print("args: ", vars(args))
 
@@ -65,21 +67,26 @@ if __name__ == '__main__':
 
     # Load some data
     # The vanilla benign examples are quite aggressive
-    wildjailbreak_dataset = load_dataset("allenai/wildjailbreak", "train", delimiter="\t", keep_default_na=False)
-    instructions = [x["vanilla"] for x in wildjailbreak_dataset["train"] if x["data_type"] == "vanilla_benign"]
+    #wildjailbreak_dataset = load_dataset("allenai/wildjailbreak", "train", delimiter="\t", keep_default_na=False)
+    #instructions = [x["vanilla"] for x in wildjailbreak_dataset["train"] if x["data_type"] == "vanilla_benign"]
+    #prompts = target_lm.get_full_prompts(instructions)
+    
+    #hidden_layers = [-(target_lm.model.model.config.num_hidden_layers // 2)]
+    hidden_layers = [-1]  # choose the last layer for getting representations, we could change this though
+    rep_token = -1
+    k = 100
+    N = 10000
+
+    # We could alternatively use the alpaca dataset
+    alpaca_dataset = load_dataset("tatsu-lab/alpaca")
+    instructions = [x["instruction"] for x in alpaca_dataset["train"]][:N]
     prompts = target_lm.get_full_prompts(instructions)
 
-    # # We could alternatively use the alpaca dataset
-    # alpaca_dataset = load_dataset("tatsu-lab/alpaca")
-
-    hidden_layers = [-(target_lm.model.model.config.num_hidden_layers // 2)]  # choose the last layer for getting representations, we could change this though
-    rep_token = -1
     rep_reading_pipeline =  pipeline("rep-reading", model=target_lm.model.model, tokenizer=target_lm.model.tokenizer, device_map="auto")
 
     reps = rep_reading_pipeline(prompts, rep_token=rep_token, hidden_layers=hidden_layers, batch_size=32)
     reps = reformat_reps(reps)
 
-    k = 100
     G = knn_graph(reps[hidden_layers[0]], k, mode='connectivity', include_self=False)  # this might not work for such a large number of reps
 
     knn_graph_data = {

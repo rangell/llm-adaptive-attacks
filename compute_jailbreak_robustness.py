@@ -84,7 +84,7 @@ if __name__ == '__main__':
     del alpaca_dataset
 
     # Compute refusal feature direction
-    hidden_layers = list(range(-1, -(target_lm.model.model.config.num_hidden_layers // 2), -1))
+    hidden_layers = list(range(-1, -(target_lm.model.model.config.num_hidden_layers), -1))
     #hidden_layers = [-1]
     rep_token = -1
     rep_reading_pipeline =  pipeline("rep-reading", model=target_lm.model.model, tokenizer=target_lm.model.tokenizer)

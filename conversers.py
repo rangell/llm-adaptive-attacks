@@ -6,8 +6,6 @@ from language_models import GPT, HuggingFace
 from transformers import AutoModelForCausalLM, AutoTokenizer, AutoConfig
 from config import *
 
-from IPython import embed
-
 
 def load_target_model(args):
     targetLM = TargetLM(model_name = args.target_model, 

@@ -4,6 +4,7 @@ import anthropic
 import os
 import time
 import torch
+import torch.nn.functional as F
 import gc
 import tiktoken
 from typing import Dict, List
@@ -122,7 +123,8 @@ class HuggingFace:
         batch_size = len(full_prompts_list)
         vocab_size = len(self.tokenizer.get_vocab())
         inputs = self.tokenizer(full_prompts_list, return_tensors='pt', padding=True)
-        inputs = {k: v.to(self.model.device.index) for k, v in inputs.items()}
+        #inputs = {k: v.to(self.model.device.index) for k, v in inputs.items()}
+        inputs = {k: v.to("cuda") for k, v in inputs.items()}
         input_ids = inputs["input_ids"]
 
         # Batch generation
@@ -157,10 +159,8 @@ class HuggingFace:
                 _out = self.model(**inputs, eos_token_id=self.eos_token_ids, pad_token_id=self.tokenizer.pad_token_id)
                 hidden_states = torch.cat(_out.hidden_states, dim=0)    
 
-            from IPython import embed; embed(); exit()
-
             # output.scores: n_output_tokens x batch_size x vocab_size (can be counter-intuitive that batch_size doesn't go first)
-            logprobs_tokens = [torch.nn.functional.log_softmax(output.scores[i_out_token], dim=-1).cpu().numpy() 
+            logprobs_tokens = [F.log_softmax(output.scores[i_out_token], dim=-1).cpu().numpy() 
                             for i_out_token in range(len(output.scores))]
             if 'llama2' in self.model_name.lower():
                 logprobs_tokens = logprobs_tokens[1:]  # ignore the first special token (id=29871)
@@ -172,6 +172,8 @@ class HuggingFace:
 
             outputs = [{'text': generated_texts[i_batch],
                         'logprobs': logprob_dicts[i_batch],
+                        'next_token_dist': F.log_softmax(output.scores[0], dim=-1),
+                        'hidden_states': hidden_states,
                         'n_input_tokens': len(input_ids[i_batch][input_ids[i_batch] != 0]),  # don't count zero-token padding
                         'n_output_tokens': len(output_ids[i_batch]),
                     } for i_batch in range(batch_size) ]
