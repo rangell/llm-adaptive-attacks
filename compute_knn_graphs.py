@@ -44,16 +44,13 @@ if __name__ == '__main__':
         default="llama3-8b",     # see conversers.py for a whole list of target models
         help="Name of target model."
     )
-    parser.add_argument(
-        "--instructions-dataset",
-        default="wildjailbreak",
-        help="Instructions dataset to use to compute representations.",
-        choices=["wildjailbreak", "alpaca"]
-    )
+    parser.add_argument("--dataset-name", default="tatsu-lab/alpaca")
+    parser.add_argument("--num-samples", type=int, default=10000)
+    parser.add_argument("--k", type=int, default=100)
+    parser.add_argument("--batch-size", type=int, default=32)
+    parser.add_argument("--output-dir", default="/scratch/rca9780/llm-adaptive-attacks-data/knn_graphs/")
 
     args = parser.parse_args()
-
-    assert args.instructions_dataset == "alpaca"
 
     print("args: ", vars(args))
 
@@ -74,30 +71,34 @@ if __name__ == '__main__':
     #hidden_layers = [-(target_lm.model.model.config.num_hidden_layers // 2)]
     hidden_layers = [-1]  # choose the last layer for getting representations, we could change this though
     rep_token = -1
-    k = 100
-    N = 10000
 
-    # We could alternatively use the alpaca dataset
-    alpaca_dataset = load_dataset("tatsu-lab/alpaca")
-    instructions = [x["instruction"] for x in alpaca_dataset["train"]][:N]
-    prompts = target_lm.get_full_prompts(instructions)
+    print(f"Loading dataset: {args.dataset_name}")
+    dataset = load_dataset(args.dataset_name, split=f"train[:{args.num_samples}]")
+
+    full_prompts = []
+    for example in dataset:
+        if example.get("input", "") != "":
+            chat = [{"role": "user", "content": example["instruction"] + ": " + example["input"] + "."}]
+        else:
+            chat = [{"role": "user", "content": example["instruction"]}]
+        full_prompts.append(target_lm.model.tokenizer.apply_chat_template(chat, tokenize=False, add_generation_prompt=True))
 
     rep_reading_pipeline =  pipeline("rep-reading", model=target_lm.model.model, tokenizer=target_lm.model.tokenizer, device_map="auto")
 
-    reps = rep_reading_pipeline(prompts, rep_token=rep_token, hidden_layers=hidden_layers, batch_size=32)
+    reps = rep_reading_pipeline(full_prompts, rep_token=rep_token, hidden_layers=hidden_layers, batch_size=args.batch_size)
     reps = reformat_reps(reps)
 
-    G = knn_graph(reps[hidden_layers[0]], k, mode='connectivity', include_self=False)  # this might not work for such a large number of reps
+    G = knn_graph(reps[hidden_layers[0]], args.k, mode='connectivity', include_self=False)  # this might not work for such a large number of reps
 
     knn_graph_data = {
         "knn_graph": G,
-        "k": k,
-        "prompts": prompts,
+        "k": args.k,
+        "prompts": full_prompts,
         "model_name": args.target_model,
         "reps": reps,
         "rep_token": rep_token,
         "hidden_layers": hidden_layers,
     }   
 
-    with open(f'/scratch/rca9780/llm-adaptive-attacks-data/knn_graphs/{args.target_model}-{args.instructions_dataset}-knn_graph-middle_layer.pkl', 'wb') as f:
+    with open(f'{args.output_dir}/{args.target_model}-{args.dataset_name.split("/")[1]}-knn_graph-{args.num_samples}-{args.k}.pkl', 'wb') as f:
         pickle.dump(knn_graph_data, f)

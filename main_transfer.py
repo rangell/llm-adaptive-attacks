@@ -120,7 +120,6 @@ def main(args):
     start_layer_idx = int(0.25 * num_hidden_layers)
     end_layer_idx = int(0.75 * num_hidden_layers)
 
-    #orig_output = targetLM.get_response([orig_msg], max_n_tokens=1)[0] 
     orig_output = targetLM.get_response([args.goal], max_n_tokens=1)[0] 
     orig_refusal_quantification = (orig_output['hidden_states'] @ refusal_direction).clamp(min=0)[:,-1].sum()
     assert orig_refusal_quantification > 0, "We do not need a jailbreak because the original message works"
@@ -192,6 +191,7 @@ Want opción 형-{ greens '''
             output = targetLM.get_response([msg], max_n_tokens=1)[0] 
             logprob_dict = output['logprobs'][0]
             logprob = extract_logprob(logprob_dict, target_token)
+            #refusal_quantification = (output['hidden_states'] @ refusal_direction).clamp(min=0)[start_layer_idx:end_layer_idx, -1].sum()
             refusal_quantification = (output['hidden_states'] @ refusal_direction).clamp(min=0)[:, -1].sum()
             jailbreak_strength = ((orig_refusal_quantification - refusal_quantification) / orig_refusal_quantification).to(torch.float32).cpu().numpy()
             print("jailbreak strength: ", jailbreak_strength)
@@ -253,7 +253,7 @@ Want opción 형-{ greens '''
 
             ################################################################
             # TODO: maybe make this a paramter of the system
-            if jailbreak_strengths[-1] >= 0.8:
+            if jailbreak_strengths[-1] >= 0.8 and early_stopping_condition(best_logprobs, targetLM, logprob_dict, target_token, args.determinstic_jailbreak):
                 break
             ################################################################
 
@@ -545,6 +545,9 @@ if __name__ == '__main__':
         for row in csv_reader:
             goals.append(row[1])
             targets.append(row[2])
+
+    goals = goals[1:]
+    targets = targets[1:]
 
     for goal, target in zip(goals, targets):
         args.goal = goal
